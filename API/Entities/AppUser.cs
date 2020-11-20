@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace API.Entities
@@ -7,6 +8,8 @@ namespace API.Entities
     {
         public int Id { get; set; }
 
+        [MaxLength(50)]
+        [EmailAddress]
         public string UserName { get; set; }
 
         public byte[] PasswordHash { get; set; }  
