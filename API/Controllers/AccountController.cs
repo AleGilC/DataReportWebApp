@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using API.Data;
 using API.DTOs;
 using API.Entities;
+using API.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,16 +13,18 @@ namespace API.Controllers
     public class AccountController : BaseApiController
     {
         private readonly DataContext _context;
-        public AccountController(DataContext context)
+        private readonly ITokenService _tokenService;
+        public AccountController(DataContext context, ITokenService tokenService)
         {
+            _tokenService = tokenService;
             _context = context;
         }
 
         [HttpPost("register")]
-        public async Task<ActionResult<AppUser>> Register(RegisterDTO registerDTO)
+        public async Task<ActionResult<UserDTO>> Register(RegisterDTO registerDTO)
         {
             if (await UserExists(registerDTO.UserName.ToLower())) return BadRequest("User is taken!!");
-            
+
             using var hmac = new HMACSHA512();
 
             var user = new AppUser
@@ -34,7 +37,34 @@ namespace API.Controllers
             _context.Add(user);
             await _context.SaveChangesAsync();
 
-            return user;
+            return new UserDTO
+            {
+                UserName = user.UserName,
+                Token = _tokenService.CreateToken(user)
+            };
+        }
+
+        [HttpPost("login")]
+        public async Task<ActionResult<UserDTO>> Login(LoginDTO loginDTO)
+        {
+            var user = await _context.Users.SingleOrDefaultAsync(x => x.UserName.Equals(loginDTO.UserName));
+
+            if (user == null) return Unauthorized("Please check your credentials and try again");
+
+            using var hmac = new HMACSHA512(user.PasswordSalt);
+
+            var computedHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(loginDTO.Password));
+
+            for (int i = 0; i < computedHash.Length; i++)
+            {
+                if (computedHash[i] != user.PasswordHash[i]) return Unauthorized("Please check your credentials and try again");
+            }
+
+            return new UserDTO
+            {
+                UserName = user.UserName,
+                Token = _tokenService.CreateToken(user)
+            };
         }
 
         private async Task<bool> UserExists(string userName) => await _context.Users.AnyAsync(x => x.UserName.Equals(userName));
